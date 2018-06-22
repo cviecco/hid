@@ -164,7 +164,7 @@ func cfstring(s string) C.CFStringRef {
 }
 
 func gostring(cfs C.CFStringRef) string {
-	if cfs == nil {
+	if cfs == nilCfStringRef {
 		return ""
 	}
 
@@ -189,7 +189,7 @@ func gostring(cfs C.CFStringRef) string {
 func getIntProp(device C.IOHIDDeviceRef, key C.CFStringRef) int32 {
 	var value int32
 	ref := C.IOHIDDeviceGetProperty(device, key)
-	if ref == nil {
+	if ref == nilCfTypeRef {
 		return 0
 	}
 	if C.CFGetTypeID(ref) != C.CFNumberGetTypeID() {
@@ -213,12 +213,17 @@ func getPath(osDev C.IOHIDDeviceRef) string {
 }
 
 func iterateDevices(action func(device C.IOHIDDeviceRef) bool) cleanupDeviceManagerFn {
-	mgr := C.IOHIDManagerCreate(C.kCFAllocatorDefault, C.kIOHIDOptionsTypeNone)
+	var mgr C.IOHIDManagerRef
+	mgr = C.IOHIDManagerCreate(C.kCFAllocatorDefault, C.kIOHIDOptionsTypeNone)
 	C.IOHIDManagerSetDeviceMatching(mgr, nil)
 	C.IOHIDManagerOpen(mgr, C.kIOHIDOptionsTypeNone)
 
-	allDevicesSet := C.IOHIDManagerCopyDevices(mgr)
-	defer C.CFRelease(C.CFTypeRef(allDevicesSet))
+	var allDevicesSet C.CFSetRef
+	allDevicesSet = C.IOHIDManagerCopyDevices(mgr)
+	if allDevicesSet == nilCfSetRef {
+		return func() {}
+	}
+	defer C.CFRelease((C.CFTypeRef)(allDevicesSet))
 	devCnt := C.CFSetGetCount(allDevicesSet)
 	allDevices := make([]unsafe.Pointer, uint64(devCnt))
 	C.CFSetGetValues(allDevicesSet, &allDevices[0])
@@ -334,7 +339,7 @@ func (dev *osxDevice) close(disconnected bool) {
 	delete(deviceCtx, dev.osDevice)
 	deviceCtxMtx.Unlock()
 	C.CFRelease(C.CFTypeRef(dev.osDevice))
-	dev.osDevice = nil
+	dev.osDevice = nilIOHIDDeviceRef
 	dev.closeDM()
 	dev.disconnected = true
 }
